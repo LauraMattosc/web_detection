@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Streaming de Vídeo</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/face-landmarks-detection"></script>
+</head>
+<body>
+    <h1>Streaming de Vídeo</h1>
+    <video id="video" width="640" height="480" controls></video>
+    <canvas id="canvas" width="640" height="480"></canvas>
+    <button id="start">Iniciar Detecção</button>
+    <button id="stop">Parar Detecção</button>
+
+    <script>
+        // Obter referências aos elementos do DOM
+        const video = document.getElementById('video');
+        const startButton = document.getElementById('start');
+        const stopButton = document.getElementById('stop');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        let faceDetector;
+        let isDetecting = false;
+        let animationId;
+
+        // Carregar o modelo de detecção de rostos
+        async function loadModel() {
+            await tf.setBackend('webgl');
+            await tf.enableProdMode();
+            faceDetector = await faceLandmarksDetection.load(
+                faceLandmarksDetection.SupportedPackages.mediapipeFacemesh,
+                { maxFaces: 1 }
+            );
+        }
+
+        // Inicializar a detecção de rostos no vídeo
+        async function detectFaces() {
+            if (isDetecting) {
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                const predictions = await faceDetector.estimateFaces({
+                    input: video,
+                    returnTensors: false
+                });
+
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                predictions.forEach((prediction) => {
+                    const keypoints = prediction.scaledMesh;
+
+                    for (let i = 0; i < keypoints.length; i++) {
+                        const [x, y] = keypoints[i];
+
+                        ctx.beginPath();
+                        ctx.arc(x, y, 1, 0, 2 * Math.PI);
+                        ctx.fillStyle = 'red';
+                        ctx.fill();
+                    }
+                });
+
+                animationId = requestAnimationFrame(detectFaces);
+            } else {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            }
+        }
+
+        // Evento de clique no botão "Iniciar Detecção"
+        startButton.addEventListener('click', () => {
+            // Solicitar acesso à câmera do usuário
+            navigator.mediaDevices.getUserMedia({ video: true })
+                .then((stream) => {
+                    // Exibir o stream de vídeo no elemento <video>
+                    video.srcObject = stream;
+                    video.play();
+
+                    // Carregar o modelo de detecção de rostos
+                    loadModel()
+                        .then(() => {
+                            // Iniciar a detecção de rostos
+                            isDetecting = true;
+                            detectFaces();
+                        })
+                        .catch((error) => {
+                            console.error('Erro ao carregar o modelo:', error);
+                        });
+                })
+                .catch((error) => {
+                    console.error('Erro ao acessar a câmera:', error);
+                });
+        });
+
+        // Evento de clique no botão "Parar Detecção"
+        stopButton.addEventListener('click', () => {
+            isDetecting = false;
+            cancelAnimationFrame(animationId);
+        });
+    </script>
+</body>
+</html>
